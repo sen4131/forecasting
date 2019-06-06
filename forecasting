@@ -1,0 +1,84 @@
+# Cleveland et al. (1990) Sesonal-Trend Decomposition Procedure based on Loess
+# https://www.wessa.net/download/stl.pdf
+
+'''
+EXTRACT FROM DATABASE
+
+select call_date, sum(gross_calls), sum(offered_calls)
+from mdb2prodrdm.dniswo_call_summary_new_ibs
+group by CALL_DATE
+order by CALL_DATE;
+'''
+
+#install packages
+install.packages("forecast")
+install.packages("ggplot2")
+install.packages("tidyverse")
+install.packages("Hmisc")
+install.packages("psych")
+install.packages("data.table")
+install.packages("caTools")
+
+#load libraries
+library("forecast") #models and graph
+library("ggplot2") #graph
+library("tidyverse")
+library("Hmisc") #summary
+library("psych") #summary
+library("data.table") #data manipulation
+library("caTools") #train-test split
+
+#
+#1. DATA PREPROCESSING
+#
+df <- read.csv("C:/Users/P2877594/grossNoffered.csv")
+df <- data.frame(df)
+names(df) <- c("Date","Gross","Offered")
+
+#1.1 Summary of data
+dim(df)
+view(df)
+describe(df)
+
+#1.2 HIGH OVERVIEW OF DATA CHARACTERISTICS
+ts.plot(df[,3], main = "Time series plot of Offered Calls", ylab = "Calls")
+hist(df[,3], main = "Hist of offered calls dist", xlab="Offered", freq = TRUE, col = 'dark green') 
+#curve (dnorm(x,mean=mean(df[,2]), sd = sd(df[,2])),add=TRUE)
+boxplot(df[,3], col = 'lightblue')
+
+
+#1.3 Clean data and split train and test
+#1.3.1 Clean
+df_clean <-  subset(df,df[3]>1000)
+df_clean <-  subset(df_clean,df_clean$Offered<80000)
+df_clean$Date = as.Date(df_clean$Date, '%d-%b-%y')
+#1.3.2 Train test split
+offered_calls = df_clean[,3]
+offered_train <- offered_calls[1:(length(offered_calls)-26)]
+offered_test <- offered_calls[(length(offered_calls)-25):length(offered_calls)]
+
+
+#1.4 Transform variable into TS format
+y <- ts(offered_train, frequency = 7)
+y_test <- ts(offered_test, frequency = 7)
+autoplot(y)
+
+#
+#2. Modeling Forecasts
+#
+#2.1 STL decomposition (Seasonal and Trend decomposition using Loess)
+autoplot(decompose(y))
+fcast <- stlf(y, method='naive')
+autoplot(fcast)
+
+#2.2 Neural Nets
+fit <- nnetar(y, lambda=0)
+autoplot(forecast(fit,h=25))
+
+
+#
+#3. Testing and Accuracy
+#
+
+
+
