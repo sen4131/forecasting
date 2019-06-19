@@ -1,2 +1,3 @@
 # forecasting
-forecasting in R
+Time series forecasting in R
+Using the forecast package
