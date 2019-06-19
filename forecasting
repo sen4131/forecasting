@@ -1,94 +1,173 @@
+rm(list=ls())
+# Research
 # Cleveland et al. (1990) Sesonal-Trend Decomposition Procedure based on Loess
 # https://www.wessa.net/download/stl.pdf
 
-'''
-EXTRACT FROM DATABASE
+#
+# SETUP ENV
+#
+	#install packages
+	install.packages("forecast")
+	install.packages("ggplot2")
+	install.packages("tidyverse")
+	install.packages("Hmisc")
+	install.packages("psych")
+	install.packages("data.table")
 
-select call_date, sum(gross_calls), sum(offered_calls)
-from mdb2prodrdm.dniswo_call_summary_new_ibs
-group by CALL_DATE
-order by CALL_DATE;
-'''
-
-#install packages
-install.packages("forecast")
-install.packages("ggplot2")
-install.packages("tidyverse")
-install.packages("Hmisc")
-install.packages("psych")
-install.packages("data.table")
-install.packages("caTools")
-
-#load libraries
-library("forecast") #models and graph
-library("ggplot2") #graph
-library("tidyverse")
-library("Hmisc") #summary
-library("psych") #summary
-library("data.table") #data manipulation
-library("caTools") #train-test split
+	#load libraries
+	library("forecast") #models and graph
+	library("ggplot2") #graph
+	library("tidyverse")
+	library("Hmisc") #summary
+	library("psych") #summary
+	library("data.table") #data manipulation
 
 #
 #1. DATA PREPROCESSING
 #
-df <- read.csv("C:/Users/P2877594/grossNoffered.csv")
-df <- data.frame(df)
-names(df) <- c("Date","Gross","Offered")
-
-#1.1 Summary of data
-dim(df)
-view(df)
-describe(df)
-
-#1.2 HIGH OVERVIEW OF DATA CHARACTERISTICS
-ts.plot(df[,3], main = "Time series plot of Offered Calls", ylab = "Calls")
-hist(df[,3], main = "Hist of offered calls dist", xlab="Offered", freq = TRUE, col = 'dark green') 
-#curve (dnorm(x,mean=mean(df[,2]), sd = sd(df[,2])),add=TRUE)
-boxplot(df[,3], col = 'lightblue')
+	df <- read.csv("./data.csv")
+	df <- data.frame(df)
+	names(df) <- c("Date","Digital","DM","General","In_matrix","Media")
 
 
-#1.3 Clean data and split train and test
-#1.3.1 Clean
-df_clean <-  subset(df,df[3]>1000)
-df_clean <-  subset(df_clean,df_clean$Offered<80000)
-df_clean$Date = as.Date(df_clean$Date, '%d-%b-%y')
-#1.3.2 Train test split and transform to TS
-offered_calls = ts(df_clean[,3], frequency = 7)
-offered_train <- ts(offered_calls[1:(length(offered_calls)-26)], frequency = 7)
-offered_test <- ts(offered_calls[(length(offered_calls)-25):length(offered_calls)], frequency = 7)
+	#1.1 Summary of data
+	dim(df)
+	view(df)
+	describe(df)
+
+	#1.2 HIGH OVERVIEW OF DATA CHARACTERISTICS
+	#Time series charts
+	par(mfcol =c(2,3))
+		ts.plot(df[,2], main = "Time series plot of Digital", ylab = "Calls")
+		ts.plot(df[,3], main = "Time series plot of DM", ylab = "Calls")
+		ts.plot(df[,4], main = "Time series plot of General", ylab = "Calls")
+		ts.plot(df[,5], main = "Time series plot of In_matrix", ylab = "Calls")
+		ts.plot(df[,6], main = "Time series plot of Media", ylab = "Calls")
+		boxplot(df[,-1], col=1:5)
+	#Boxplot
+	boxplot(df[,-1], col=1:5)
+	par(mfcol =c(1,1))
+	#1.3 Clean data and split train and test
+	#1.3.1 Clean
+	Date = as.Date(df_clean$Date, '%d-%b-%y')
+	Digital_clean <- ts(na.omit(df$Digital),frequency = 7)
+	DM_clean <- na.omit(df$DM)
+	General_clean <- ts(na.omit(df$General[!df$General %in% boxplot.stats(df$General)$out]),frequency = 7)
+	In_matrix_clean <- ts(na.omit(df$In_matrix[!df$In_matrix %in% boxplot.stats(df$In_matrix)$out]),frequency=7)
+	Media_clean <- ts(na.omit(df$Media),frequency=7)
+
+	#1.3.2 Train test split and transform to TS
+	Digital_train <- ts(Digital_clean[1:(length(Digital_clean)-25)], frequency = 7)
+	Digital_test <- ts(Digital_clean[(length(Digital_clean)-24):length(Digital_clean)], frequency = 7)
 
 
 #
 #2. Modeling Forecasts
 #
-#2.1 STL decomposition (Seasonal and Trend decomposition using Loess)
-autoplot(decompose(offered_calls))
-fit <- stlf(offered_train, method='naive')
-fc <- (forecast(fit,h=25))
-autoplot(offered_calls) +
-  autolayer(fc, series="STL", PI=FALSE)+
-  guides(colour=guide_legend(title="Daily forecasts"))
 
-#2.2 Neural Nets
-fit <- nnetar(offered_train, lambda=0)
-fc <- (forecast(fit,h=25))
-autoplot(offered_calls) +
-  autolayer(fc, series="Neural Nets", PI=FALSE)+
-  guides(colour=guide_legend(title="Daily forecasts"))
+	#2.1 STL decomposition (Seasonal and Trend decomposition using Loess)
+	autoplot(decompose(Digital_clean))
+	fit1 <- stl(Digital_train, s.window=7)
+	fc_stl <- forecast(fit1,h=25)
+	#fc_stl <- stlf(Digital_train, method='naive', h=25)
 
-#2.3 Holt-Winters’ seasonal method
-fc <- hw(offered_train,damped = TRUE, seasonal="multiplicative", h=25)
-autoplot(offered_calls) +
-  autolayer(fc, series="HW multi damped", PI=FALSE)+
-  guides(colour=guide_legend(title="Daily forecasts"))
+	autoplot(Digital_clean) +
+	  autolayer(fc_stl, series="STL", PI=FALSE)+
+	  guides(colour=guide_legend(title="Daily forecasts"))
+	
+	checkresiduals(fc_stl)
+	
 
+	#2.2 Neural Nets
+	fit2 <- nnetar(Digital_train, lambda=0)
+	fc_nn <- (forecast(fit2,h=25))
+
+	autoplot(Digital_clean) +
+	  autolayer(fc_nn, series="Neural Nets", PI=FALSE)+
+	  guides(colour=guide_legend(title="Daily forecasts"))
+  
+	checkresiduals(fc_nn)
+	
+	#2.3 Auto-arima
+	fit3 <- auto.arima(Digital_train)
+	fc_arima <- forecast(fit3,h=25)
+
+	autoplot(Digital_clean) +
+	  autolayer(fc_arima, series="Auto-arima", PI=FALSE)+
+	  guides(colour=guide_legend(title="Daily forecasts"))
+	
+	checkresiduals(fc_arima)
+	
+	#2.4 Holt-Winter's seasonal method (exp smoothing)
+	fc_hw <- hw(In_matrix_clean,damped = TRUE, seasonal="multiplicative", h=25)
+
+	autoplot(In_matrix_clean) +
+	  autolayer(fc_hw, series="HW multi damped", PI=FALSE)+
+	  guides(colour=guide_legend(title="Daily forecasts"))
+
+	checkresiduals(fc_hw)
+	
 #
 #3. Testing and Accuracy
 #
-cafe.test <- stl(test, model=fit)
-accuracy(cafe.test)
+
+	autoplot(Digital_clean) +
+		autolayer(fc_stl, series="STL", PI=FALSE)+
+		autolayer(fc_nn, series="Neural Nets", PI=FALSE)+
+		autolayer(fc_hw, series="HW multi damped", PI=FALSE)+
+		autolayer(fc_arima, series="ARIMA", PI=FALSE)
+
+	#Residual testing	
+	checkresiduals(fc_stl)
+	checkresiduals(fc_nn) 
+	checkresiduals(fc_arima)
+	checkresiduals(fc_hw)
+
+	#Accuracy
+	accuracy(fc_stl)
+	accuracy(fc_nn)
+	accuracy(fc_arima)
+	accuracy(fc_hw)
 
 
+#
+#Forecasting and testing as a Function
+#Step 1.3 - 3
+all_forecasts <- function(data_series,forecast_period){
+	#step 1.3
+	data_series_clean <- ts(na.omit(data_series[!data_series %in% boxplot.stats(data_series)$out]), frequency = 7)
+	data_series_clean.train <- ts(data_series_clean[1:(length(data_series_clean)-forecast_period)], frequency = 7)
+	data_series_clean.test <- ts(data_series_clean[(length(data_series_clean)-(forecast_period-1)):length(data_series_clean)], frequency = 7)
 
+	#step 2
+	fit1 <- stl(data_series_clean.train, s.window=14)
+	fc_stl <- forecast(fit1,h=forecast_period)
+	
+	fit2 <- nnetar(data_series_clean.train, lambda=0)
+	fc_nn <- (forecast(fit2,h=forecast_period))
+	
+	fit3 <- auto.arima(data_series_clean.train)
+	fc_arima <- forecast(fit3,h=forecast_period)
+	
+	fit4 <- hw(data_series_clean.train,damped = TRUE, seasonal="additive")
+	fc_hw <- hw(data_series_clean.train,damped = TRUE, seasonal="additive", h=forecast_period)
+	
+	print(autoplot(data_series_clean) +
+	autolayer(fc_stl, series="STL", PI=FALSE)+
+	autolayer(fc_nn, series="Neural Nets", PI=FALSE)+
+	autolayer(fc_hw, series="HW multi damped", PI=FALSE)+
+	autolayer(fc_arima, series="ARIMA", PI=FALSE))
+	
+	#step 3
+	print(accuracy(fc_stl))
+	print(accuracy(fc_nn))
+	print(accuracy(fc_arima))
+	print(accuracy(fc_hw))
+}
 
+all_forecasts(Digital_clean,25)
+all_forecasts(DM_clean,25)
+all_forecasts(General_clean,25)
+all_forecasts(In_matrix_clean,25)
+all_forecasts(Media_clean,25)
 
