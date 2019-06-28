@@ -26,49 +26,57 @@ ui <- fluidPage(
                     "Exp smoothing" = "hw"), "stl")
     ),
     mainPanel(
-      plotOutput("tsplot1")
+      plotOutput("tsplot1"), plotOutput("resid"), tableOutput("forecast") 
     )
   )
 )
 server <- function(input, output) {
-  
+
   output$tsplot1 <- renderPlot({
-    #ts.plot(ts(df[input$Series]), main = "Time series Plot", ylab = input$Series)
+    x <- ts(na.omit(df[input$Series]), frequency = 7)
+  
+    if (input$model == "stl"){
+        x %>% stlf(t.window=7, h=24)%>% autoplot()
+    } else if (input$model == "nnetar"){
+        x %>% nnetar(P=6) %>% forecast(h=24) %>% autoplot()
+    } else if (input$model == "auto.arima"){
+        x %>% auto.arima() %>% forecast(h=24) %>% autoplot()
+    } else if (input$model == "hw"){
+        x %>% hw(damped = TRUE, seasonal="multiplicative", h=24)  %>% autoplot()
+    }
+    
+  })
+  
+  output$resid <- renderPlot({
     x <- ts(na.omit(df[input$Series]), frequency = 7)
     
     if (input$model == "stl"){
-      
-      
-      #2.1 STL decomposition (Seasonal and Trend decomposition using Loess)
-   
-      fit1 <- stl(x, s.window=7)
-      fc_stl <- forecast(fit1,h=14)
-
-      autoplot(x) +
-        autolayer(fc_stl, series="STL", PI=FALSE)+
-        guides(colour=guide_legend(title="Daily forecasts"))
-      
-      checkresiduals(fc_stl)
-      
+      checkresiduals(x %>% stlf(t.window=7))
     } else if (input$model == "nnetar"){
-      
-      fit2 <- nnetar(x, lambda=0)
-      fc_nn <- (forecast(fit2,h=25))
-      
-      autoplot(x) +
-        autolayer(fc_nn, series="Neural Nets", PI=FALSE)+
-        guides(colour=guide_legend(title="Daily forecasts"))
-      
-      checkresiduals(fc_nn)
-      
+      checkresiduals(x %>% nnetar(P=6) %>% forecast(h=24))
     } else if (input$model == "auto.arima"){
-      
+      checkresiduals(x %>% auto.arima() %>% forecast(h=24))
     } else if (input$model == "hw"){
-      
+      checkresiduals(x %>% hw(damped = TRUE, seasonal="multiplicative", h=25))
     }
     
-
   })
+
+  output$forecast <- renderTable({
+    x <- ts(na.omit(df[input$Series]), frequency = 7)
+    
+    if (input$model == "stl"){
+      x %>% stlf(t.window=7, h=24)
+    } else if (input$model == "nnetar"){
+      x %>% nnetar(P=6) %>% forecast(h=24) 
+    } else if (input$model == "auto.arima"){
+      x %>% auto.arima() %>% forecast(h=24) 
+    } else if (input$model == "hw"){
+      x %>% hw(damped = TRUE, seasonal="multiplicative", h=24)  
+    }
+    
+  })
+
   
 }
 shinyApp(ui = ui, server = server)
