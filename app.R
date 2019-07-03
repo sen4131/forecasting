@@ -39,7 +39,11 @@ ui <- fluidPage(
   )
 )
 server <- function(input, output) {
-
+  
+  df_date_filtered <- reactive({
+    filter(df, df$Date > input$date[1] & df$Date < input$date[2])
+  })
+  
   output$tsplot1 <- renderPlot({
 
     df_date_filtered <- filter(df, df$Date > input$date[1] & df$Date < input$date[2])
